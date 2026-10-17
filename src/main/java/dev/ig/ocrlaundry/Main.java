@@ -1,4 +1,4 @@
-package dev.yoldas.ocrlaundry;
+package dev.ig.ocrlaundry;
 
 public final class Main {
     private Main() {
