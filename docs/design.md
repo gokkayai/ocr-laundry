@@ -10,3 +10,10 @@
 - OCR runners receive a cancellation token and must check it during long work.
 - Shutdown rejects new submissions, drains accepted work, and wakes idle workers.
 - Scheduling policy and worker count are fixed for the lifetime of an engine.
+- FIFO orders waiting jobs by submission sequence.
+- Estimated SJF orders waiting jobs by page count, then submission sequence.
+- Page count is only a rough ranking cost, not a predicted OCR duration.
+- Scheduling is non-preemptive: a newly submitted short job does not interrupt
+  work that has already started.
+- A steady stream of short jobs can starve a long job under estimated SJF;
+  fairness and aging are deferred extensions.

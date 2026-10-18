@@ -14,6 +14,9 @@ public final class QueueOrdering {
         Objects.requireNonNull(policy, "policy");
         return switch (policy) {
             case FIFO -> Comparator.comparingLong(JobRecord::submittedSequence);
+            case ESTIMATED_SJF -> Comparator
+                    .comparingInt(JobRecord::estimatedCost)
+                    .thenComparingLong(JobRecord::submittedSequence);
         };
     }
 }

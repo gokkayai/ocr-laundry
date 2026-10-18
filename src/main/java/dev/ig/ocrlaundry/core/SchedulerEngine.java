@@ -30,6 +30,7 @@ public final class SchedulerEngine implements AutoCloseable {
     private final DocumentCatalog documentCatalog;
     private final OcrRunner ocrRunner;
     private final Clock clock;
+    private final SchedulingPolicy schedulingPolicy;
     private final int pendingCapacity;
     private final PriorityQueue<JobRecord> pendingJobs;
     private final Map<UUID, JobRecord> jobs = new LinkedHashMap<>();
@@ -65,12 +66,27 @@ public final class SchedulerEngine implements AutoCloseable {
             DocumentCatalog documentCatalog,
             OcrRunner ocrRunner,
             SchedulingPolicy policy,
+            int workerCount) {
+        this(
+                documentCatalog,
+                ocrRunner,
+                policy,
+                DEFAULT_PENDING_CAPACITY,
+                workerCount,
+                Clock.systemUTC());
+    }
+
+    public SchedulerEngine(
+            DocumentCatalog documentCatalog,
+            OcrRunner ocrRunner,
+            SchedulingPolicy policy,
             int pendingCapacity,
             int workerCount,
             Clock clock) {
         this.documentCatalog = Objects.requireNonNull(documentCatalog, "documentCatalog");
         this.ocrRunner = Objects.requireNonNull(ocrRunner, "ocrRunner");
         this.clock = Objects.requireNonNull(clock, "clock");
+        schedulingPolicy = Objects.requireNonNull(policy, "policy");
         if (pendingCapacity <= 0) {
             throw new IllegalArgumentException("pendingCapacity must be positive");
         }
@@ -78,7 +94,7 @@ public final class SchedulerEngine implements AutoCloseable {
             throw new IllegalArgumentException("workerCount must be positive");
         }
         this.pendingCapacity = pendingCapacity;
-        pendingJobs = new PriorityQueue<>(QueueOrdering.forPolicy(policy));
+        pendingJobs = new PriorityQueue<>(QueueOrdering.forPolicy(schedulingPolicy));
         workers = new ArrayList<>(workerCount);
         for (int workerNumber = 1; workerNumber <= workerCount; workerNumber++) {
             Thread worker = new Thread(
@@ -171,6 +187,10 @@ public final class SchedulerEngine implements AutoCloseable {
 
     public int workerCount() {
         return workers.size();
+    }
+
+    public SchedulingPolicy schedulingPolicy() {
+        return schedulingPolicy;
     }
 
     public boolean awaitIdle(Duration timeout) throws InterruptedException {

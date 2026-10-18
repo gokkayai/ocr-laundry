@@ -39,4 +39,34 @@ class QueueOrderingTest {
         assertEquals(1, queue.remove().submittedSequence());
         assertEquals(2, queue.remove().submittedSequence());
     }
+
+    @Test
+    void estimatedSjfUsesPageCountThenSubmissionSequence() {
+        JobRecord longJob = job(0, 8);
+        JobRecord laterShortJob = job(2, 1);
+        JobRecord earlierShortJob = job(1, 1);
+        PriorityQueue<JobRecord> queue = new PriorityQueue<>(
+                QueueOrdering.forPolicy(SchedulingPolicy.ESTIMATED_SJF));
+
+        queue.add(longJob);
+        queue.add(laterShortJob);
+        queue.add(earlierShortJob);
+
+        assertEquals(1, queue.remove().submittedSequence());
+        assertEquals(2, queue.remove().submittedSequence());
+        assertEquals(0, queue.remove().submittedSequence());
+    }
+
+    private static JobRecord job(long sequence, int pageCount) {
+        DocumentInfo document = new DocumentInfo(
+                "document-" + sequence,
+                Path.of("document-" + sequence + ".pdf"),
+                pageCount);
+        return new JobRecord(
+                UUID.randomUUID(),
+                new JobSpec(document.id(), 0),
+                document,
+                sequence,
+                Instant.EPOCH.plusSeconds(sequence));
+    }
 }

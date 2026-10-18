@@ -29,6 +29,7 @@ import dev.ig.ocrlaundry.docs.PdfInspector;
 import dev.ig.ocrlaundry.model.JobSnapshot;
 import dev.ig.ocrlaundry.model.JobSpec;
 import dev.ig.ocrlaundry.model.JobStatus;
+import dev.ig.ocrlaundry.model.SchedulingPolicy;
 import dev.ig.ocrlaundry.ocr.OcrResult;
 import dev.ig.ocrlaundry.ocr.OcrRunner;
 
@@ -282,20 +283,101 @@ class SchedulerEngineTest {
                 () -> engine.submit(new JobSpec("document-0", 0)));
     }
 
+    @Test
+    void fifoAndEstimatedSjfOrderTheSameBacklogDifferently() throws Exception {
+        Map<String, Integer> pageCounts = new LinkedHashMap<>();
+        pageCounts.put("blocker", 2);
+        pageCounts.put("long", 8);
+        pageCounts.put("short", 1);
+        pageCounts.put("medium", 4);
+        DocumentCatalog catalog = createCatalogWithPageCounts(pageCounts);
+
+        List<String> fifoOrder = runBacklog(catalog, SchedulingPolicy.FIFO);
+        List<String> sjfOrder = runBacklog(catalog, SchedulingPolicy.ESTIMATED_SJF);
+
+        assertEquals(
+                List.of("blocker.pdf", "long.pdf", "short.pdf", "medium.pdf"),
+                fifoOrder);
+        assertEquals(
+                List.of("blocker.pdf", "short.pdf", "medium.pdf", "long.pdf"),
+                sjfOrder);
+    }
+
+    @Test
+    void estimatedSjfDoesNotPreemptRunningJobForShortArrival() throws Exception {
+        Map<String, Integer> pageCounts = new LinkedHashMap<>();
+        pageCounts.put("long", 8);
+        pageCounts.put("short", 1);
+        DocumentCatalog catalog = createCatalogWithPageCounts(pageCounts);
+        BlockingFirstRunner runner = new BlockingFirstRunner();
+        SchedulerEngine engine = new SchedulerEngine(
+                catalog,
+                runner,
+                SchedulingPolicy.ESTIMATED_SJF,
+                1);
+
+        try {
+            JobSnapshot longJob = engine.submit(new JobSpec("long", 100));
+            assertTrue(runner.awaitFirstStarted());
+            JobSnapshot shortJob = engine.submit(new JobSpec("short", -100));
+
+            assertEquals(JobStatus.RUNNING, engine.find(longJob.id()).orElseThrow().status());
+            assertEquals(JobStatus.QUEUED, engine.find(shortJob.id()).orElseThrow().status());
+
+            runner.releaseFirst();
+            assertTrue(engine.awaitIdle(Duration.ofSeconds(5)));
+            assertEquals(List.of("long.pdf", "short.pdf"), runner.executionOrder());
+        } finally {
+            runner.releaseFirst();
+            engine.close();
+        }
+    }
+
     private DocumentCatalog createCatalog(int documentCount) throws IOException {
-        Map<String, Path> paths = new LinkedHashMap<>();
+        Map<String, Integer> pageCounts = new LinkedHashMap<>();
         for (int index = 0; index < documentCount; index++) {
-            Path path = tempDirectory.resolve("document-" + index + ".pdf");
+            pageCounts.put("document-" + index, index % 3 + 1);
+        }
+        return createCatalogWithPageCounts(pageCounts);
+    }
+
+    private DocumentCatalog createCatalogWithPageCounts(Map<String, Integer> pageCounts)
+            throws IOException {
+        Map<String, Path> paths = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : pageCounts.entrySet()) {
+            Path path = tempDirectory.resolve(entry.getKey() + ".pdf");
             try (PDDocument document = new PDDocument()) {
-                int pageCount = index % 3 + 1;
-                for (int page = 0; page < pageCount; page++) {
+                for (int page = 0; page < entry.getValue(); page++) {
                     document.addPage(new PDPage());
                 }
                 document.save(path.toFile());
             }
-            paths.put("document-" + index, path);
+            paths.put(entry.getKey(), path);
         }
         return new DocumentCatalog(paths, new PdfInspector());
+    }
+
+    private List<String> runBacklog(DocumentCatalog catalog, SchedulingPolicy policy)
+            throws Exception {
+        BlockingFirstRunner runner = new BlockingFirstRunner();
+        SchedulerEngine engine = new SchedulerEngine(catalog, runner, policy, 1);
+
+        try {
+            engine.submit(new JobSpec("blocker", 0));
+            assertTrue(runner.awaitFirstStarted());
+            engine.submit(new JobSpec("long", -100));
+            engine.submit(new JobSpec("short", 100));
+            engine.submit(new JobSpec("medium", 0));
+            assertEquals(3, engine.pendingCount());
+            assertEquals(policy, engine.schedulingPolicy());
+
+            runner.releaseFirst();
+            assertTrue(engine.awaitIdle(Duration.ofSeconds(5)));
+            return runner.executionOrder();
+        } finally {
+            runner.releaseFirst();
+            engine.close();
+        }
     }
 
     private static final class BlockingFirstRunner implements OcrRunner {

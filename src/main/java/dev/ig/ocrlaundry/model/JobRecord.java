@@ -41,6 +41,10 @@ public final class JobRecord {
         return submittedSequence;
     }
 
+    public int estimatedCost() {
+        return estimatedCost;
+    }
+
     public UUID id() {
         return id;
     }
