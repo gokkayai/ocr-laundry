@@ -38,6 +38,10 @@ The service listens on `127.0.0.1` and accepts only the sample document IDs retu
 `GET /api/documents`. See [`docs/api.md`](docs/api.md) for endpoints and a complete `curl`
 workflow.
 
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) while the server is running to use the
+dashboard. It submits real API jobs, polls their status without overlapping requests, exposes
+queue and latency metrics, supports cancellation, and links to the static benchmark evidence.
+
 ## OCR requirements
 
 Install Tesseract with the English language data. Verify the installation with:

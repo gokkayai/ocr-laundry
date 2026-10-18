@@ -32,6 +32,20 @@
 
     <build>
         <finalName>ocr-laundry</finalName>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>docs/experiment-results</directory>
+                <targetPath>published-docs</targetPath>
+                <includes>
+                    <include>mean-completion-latency.svg</include>
+                    <include>raw.csv</include>
+                    <include>summary.csv</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

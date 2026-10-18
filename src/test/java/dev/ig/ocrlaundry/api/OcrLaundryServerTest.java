@@ -46,6 +46,32 @@ class OcrLaundryServerTest {
     }
 
     @Test
+    void servesTheDashboardAndStaticBenchmarkFromTheJar() throws Exception {
+        try (TestApplication application = start(false, true)) {
+            HttpResponse<String> dashboard = application.get("/");
+            HttpResponse<String> dashboardHead = application.head("/");
+            HttpResponse<String> script = application.get("/app.js");
+            HttpResponse<String> benchmark = application.get("/benchmark");
+            HttpResponse<String> summary = application.get("/benchmark/summary.csv");
+
+            assertEquals(200, dashboard.statusCode());
+            assertTrue(dashboard.body().contains("ocr-laundry dashboard"));
+            assertTrue(dashboard.headers().firstValue("Content-Security-Policy").isPresent());
+            assertEquals(200, dashboardHead.statusCode());
+            assertEquals("text/html; charset=utf-8", dashboardHead.headers()
+                    .firstValue("Content-Type").orElseThrow());
+            assertEquals(200, script.statusCode());
+            assertTrue(script.body().contains("textContent"));
+            assertTrue(!script.body().contains("innerHTML"));
+            assertTrue(!script.body().contains("setInterval"));
+            assertEquals(200, benchmark.statusCode());
+            assertTrue(benchmark.body().contains("41.7%"));
+            assertEquals(200, summary.statusCode());
+            assertTrue(summary.body().startsWith("policy,workers"));
+        }
+    }
+
+    @Test
     void submitsInspectsAndMeasuresACompletedJob() throws Exception {
         try (TestApplication application = start(false, true)) {
             HttpResponse<String> submitted = application.post(
@@ -159,6 +185,12 @@ class OcrLaundryServerTest {
 
         HttpResponse<String> delete(String path) throws IOException, InterruptedException {
             return send(HttpRequest.newBuilder(uri(path)).DELETE().build());
+        }
+
+        HttpResponse<String> head(String path) throws IOException, InterruptedException {
+            return send(HttpRequest.newBuilder(uri(path))
+                    .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                    .build());
         }
 
         private HttpResponse<String> send(HttpRequest request)

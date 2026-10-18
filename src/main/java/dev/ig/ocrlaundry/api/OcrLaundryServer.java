@@ -52,6 +52,7 @@ public final class OcrLaundryServer implements AutoCloseable {
         server.createContext("/api/documents", this::handleSafely);
         server.createContext("/api/jobs", this::handleSafely);
         server.createContext("/api/metrics", this::handleSafely);
+        server.createContext("/", this::handleSafely);
     }
 
     public void start() {
@@ -81,13 +82,28 @@ public final class OcrLaundryServer implements AutoCloseable {
             } else if (path.equals("/api/jobs") || path.startsWith("/api/jobs/")) {
                 handleJobs(exchange, path);
             } else {
-                sendError(exchange, 404, "Endpoint not found");
+                handleDashboardAsset(exchange, path);
             }
         } catch (RuntimeException exception) {
             sendError(exchange, 500, "Unexpected server error");
         } finally {
             exchange.close();
         }
+    }
+
+    private void handleDashboardAsset(HttpExchange exchange, String path) throws IOException {
+        String method = exchange.getRequestMethod();
+        if (!method.equals("GET") && !method.equals("HEAD")) {
+            methodNotAllowed(exchange, "GET, HEAD");
+            return;
+        }
+        Optional<DashboardAssets.Asset> asset = DashboardAssets.find(path);
+        if (asset.isEmpty()) {
+            sendError(exchange, 404, "Endpoint not found");
+            return;
+        }
+        DashboardAssets.Asset found = asset.orElseThrow();
+        sendBytes(exchange, 200, found.contentType(), found.read(), false);
     }
 
     private void handleHealth(HttpExchange exchange) throws IOException {
@@ -344,8 +360,30 @@ public final class OcrLaundryServer implements AutoCloseable {
     private static void sendJson(HttpExchange exchange, int status, String json)
             throws IOException {
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        sendBytes(exchange, status, "application/json; charset=utf-8", body, true);
+    }
+
+    private static void sendBytes(
+            HttpExchange exchange,
+            int status,
+            String contentType,
+            byte[] body,
+            boolean noStore) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", contentType);
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.getResponseHeaders().set("Referrer-Policy", "no-referrer");
+        exchange.getResponseHeaders().set(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+                        + "connect-src 'self'; base-uri 'none'; form-action 'self'");
+        exchange.getResponseHeaders().set(
+                "Cache-Control",
+                noStore ? "no-store" : "public, max-age=300");
+        if (exchange.getRequestMethod().equals("HEAD")) {
+            exchange.getResponseHeaders().set("Content-Length", Integer.toString(body.length));
+            exchange.sendResponseHeaders(status, -1);
+            return;
+        }
         exchange.sendResponseHeaders(status, body.length);
         exchange.getResponseBody().write(body);
     }
