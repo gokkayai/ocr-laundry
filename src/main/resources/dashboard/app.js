@@ -23,6 +23,17 @@ const elements = {
 };
 
 let dashboardRequestInFlight = false;
+let jobsEtag = null;
+
+async function requestJobs() {
+  const headers = jobsEtag ? { "If-None-Match": jobsEtag } : {};
+  const response = await fetch("/api/jobs?view=dashboard", { headers, cache: "no-store" });
+  if (response.status === 304) return null;
+  if (!response.ok) throw new Error(`Jobs request failed: ${response.status}`);
+  const body = await response.json();
+  jobsEtag = response.headers.get("ETag");
+  return body;
+}
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, options);
@@ -70,14 +81,16 @@ async function refreshDashboard() {
   dashboardRequestInFlight = true;
   elements.jobsList.setAttribute("aria-busy", "true");
   try {
-    const [health, metrics, jobs] = await Promise.all([
+    const [health, metrics, jobs] = await Promise.allSettled([
       requestHealth(),
       requestJson("/api/metrics"),
-      requestJson("/api/jobs")
+      requestJobs()
     ]);
-    renderHealth(health);
-    renderMetrics(metrics);
-    renderJobs(jobs.jobs);
+    renderHealth(health.status === "fulfilled" ? health.value : null);
+    if (metrics.status === "fulfilled") renderMetrics(metrics.value);
+    if (jobs.status === "fulfilled" && jobs.value) renderJobs(jobs.value.jobs);
+    const failure = [health, metrics, jobs].find(result => result.status === "rejected");
+    if (failure) throw failure.reason;
     elements.lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
   } catch (error) {
     renderHealth(null);

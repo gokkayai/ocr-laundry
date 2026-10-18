@@ -1,5 +1,12 @@
 # HTTP API
 
+Finished history is bounded to 100 jobs (evicted in completion order), plus all active jobs.
+Eviction releases the stored OCR result and metadata; evicted IDs return 404. This is not durable
+storage. Metrics describe retained history, not lifetime totals.
+`GET /api/jobs?view=dashboard` returns all active jobs plus the 20 most recently submitted finished
+jobs still retained. Plain `GET /api/jobs` returns all retained jobs. Both support `ETag` and
+`If-None-Match`, returning a bodyless 304 when unchanged. The dashboard skips rendering on 304.
+
 The API is a local, in-memory interface to the scheduler. It does not accept filesystem paths or
 PDF uploads. Only the documents listed by `GET /api/documents` can be submitted.
 

@@ -162,14 +162,34 @@ public final class OcrLaundryServer implements AutoCloseable {
 
     private void listJobs(HttpExchange exchange) throws IOException {
         StringBuilder json = new StringBuilder("{\"jobs\":[");
-        List<JobSnapshot> jobs = scheduler.jobs();
+        String query = exchange.getRequestURI().getRawQuery();
+        if (query != null && !query.equals("view=dashboard")) {
+            sendError(exchange, 400, "Supported query: view=dashboard");
+            return;
+        }
+        List<JobSnapshot> jobs = query == null ? scheduler.jobs() : scheduler.dashboardJobs();
         for (int index = 0; index < jobs.size(); index++) {
             if (index > 0) {
                 json.append(',');
             }
             json.append(jobJson(jobs.get(index)));
         }
-        sendJson(exchange, 200, json.append("]}").toString());
+        String body = json.append("]}").toString();
+        String etag;
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(body.getBytes(StandardCharsets.UTF_8));
+            etag = "\"" + java.util.HexFormat.of().formatHex(digest) + "\"";
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
+        exchange.getResponseHeaders().set("ETag", etag);
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache, private");
+        if (etag.equals(exchange.getRequestHeaders().getFirst("If-None-Match"))) {
+            exchange.sendResponseHeaders(304, -1);
+            return;
+        }
+        sendJson(exchange, 200, body);
     }
 
     private void submitJob(HttpExchange exchange) throws IOException {

@@ -3,6 +3,7 @@ package dev.ig.ocrlaundry.core;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +26,7 @@ import dev.ig.ocrlaundry.ocr.OcrRunner;
 public final class SchedulerEngine implements AutoCloseable {
     public static final int DEFAULT_PENDING_CAPACITY = 20;
     public static final int DEFAULT_WORKER_COUNT = 2;
+    public static final int HISTORY_LIMIT = 100;
 
     private final Object stateLock = new Object();
     private final DocumentCatalog documentCatalog;
@@ -33,7 +35,8 @@ public final class SchedulerEngine implements AutoCloseable {
     private final SchedulingPolicy schedulingPolicy;
     private final int pendingCapacity;
     private final PriorityQueue<JobRecord> pendingJobs;
-    private final Map<UUID, JobRecord> jobs = new LinkedHashMap<>();
+    private final LinkedHashMap<UUID, JobRecord> jobs = new LinkedHashMap<>();
+    private final ArrayDeque<UUID> finishedJobs = new ArrayDeque<>();
     private final Map<UUID, CancellationToken> runningTokens = new HashMap<>();
     private final List<Thread> workers;
 
@@ -199,6 +202,7 @@ public final class SchedulerEngine implements AutoCloseable {
             if (job.status() == JobStatus.QUEUED) {
                 pendingJobs.remove(job);
                 job.markCancelled(clock.instant());
+                retainFinished(job);
                 stateLock.notifyAll();
                 return true;
             }
@@ -327,6 +331,7 @@ public final class SchedulerEngine implements AutoCloseable {
             }
             runningTokens.remove(job.id());
             runningCount--;
+            retainFinished(job);
             stateLock.notifyAll();
         }
     }
@@ -336,5 +341,28 @@ public final class SchedulerEngine implements AutoCloseable {
         return message == null || message.isBlank()
                 ? exception.getClass().getSimpleName()
                 : message;
+    }
+
+    // Called under stateLock. Active jobs are never evicted.
+    private void retainFinished(JobRecord job) {
+        finishedJobs.addLast(job.id());
+        while (finishedJobs.size() > HISTORY_LIMIT) {
+            jobs.remove(finishedJobs.removeFirst());
+        }
+    }
+
+    public List<JobSnapshot> dashboardJobs() {
+        synchronized (stateLock) {
+            List<JobSnapshot> recent = new ArrayList<>();
+            int terminalCount = 0;
+            for (JobRecord job : jobs.reversed().values()) {
+                boolean active = job.status() == JobStatus.QUEUED || job.status() == JobStatus.RUNNING;
+                if (active || terminalCount++ < 20) {
+                    recent.add(job.snapshot());
+                }
+            }
+            java.util.Collections.reverse(recent);
+            return recent;
+        }
     }
 }

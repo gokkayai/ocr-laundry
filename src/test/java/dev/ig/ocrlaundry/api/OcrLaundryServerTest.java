@@ -31,6 +31,57 @@ class OcrLaundryServerTest {
     Path tempDirectory;
 
     @Test
+    void boundsHistoryAndMeasuresDashboardPayload() throws Exception {
+        try (TestApplication application = start(false, true)) {
+            int baselineBytes = "{\"jobs\":[]}".getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            java.util.UUID first = null;
+            for (int index = 0; index < 1000; index++) {
+                var submitted = application.scheduler().submit(new JobSpec("small", 0));
+                if (first == null) first = submitted.id();
+                assertTrue(application.scheduler().awaitIdle(Duration.ofSeconds(5)));
+                var detail = application.get("/api/jobs/" + submitted.id());
+                baselineBytes += detail.body().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                if (index > 0) baselineBytes++;
+            }
+            assertEquals(100, application.scheduler().jobs().size());
+            assertEquals(20, application.scheduler().dashboardJobs().size());
+            assertTrue(application.scheduler().find(first).isEmpty());
+            var response = application.get("/api/jobs?view=dashboard");
+            int actualBytes = response.body().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            var unchanged = application.send(HttpRequest.newBuilder(application.uri("/api/jobs?view=dashboard"))
+                    .header("If-None-Match", response.headers().firstValue("ETag").orElseThrow())
+                    .GET().build());
+            assertEquals(304, unchanged.statusCode());
+            assertEquals("", unchanged.body());
+            application.scheduler().submit(new JobSpec("small", 0));
+            assertTrue(application.scheduler().awaitIdle(Duration.ofSeconds(5)));
+            var changed = application.send(HttpRequest.newBuilder(application.uri("/api/jobs?view=dashboard"))
+                    .header("If-None-Match", response.headers().firstValue("ETag").orElseThrow())
+                    .GET().build());
+            assertEquals(200, changed.statusCode());
+            System.out.printf("HISTORY BENCHMARK: jobs=1000 retained=100 displayed=20 baselineBytes=%d actualBytes=%d unchangedBytes=0%n",
+                    baselineBytes, actualBytes);
+        }
+    }
+
+    @Test
+    void preservesOldActiveJobsWhileEvictingCancelledHistory() throws Exception {
+        try (TestApplication application = start(true, true)) {
+            var active = application.scheduler().submit(new JobSpec("small", 0));
+            for (int index = 0; index < 110; index++) {
+                var job = application.scheduler().submit(new JobSpec("small", 0));
+                assertTrue(application.scheduler().cancel(job.id()));
+            }
+            assertEquals(101, application.scheduler().jobs().size());
+            assertEquals(21, application.scheduler().dashboardJobs().size());
+            assertTrue(application.scheduler().dashboardJobs().stream()
+                    .anyMatch(job -> job.id().equals(active.id())));
+            assertTrue(application.scheduler().cancel(active.id()));
+            assertEquals(100, application.scheduler().jobs().size());
+        }
+    }
+
+    @Test
     void reportsHealthAndAllowlistedDocumentsWithoutPaths() throws Exception {
         try (TestApplication application = start(false, true)) {
             HttpResponse<String> health = application.get("/health");

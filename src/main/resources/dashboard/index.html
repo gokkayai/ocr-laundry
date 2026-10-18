@@ -89,10 +89,10 @@
         <article class="metric-card">
           <p>Mean completion</p>
           <strong id="mean-latency">—</strong>
-          <small>Successful jobs only</small>
+          <small>Successful jobs in retained history</small>
         </article>
         <article class="metric-card">
-          <p>Completed</p>
+          <p>Completed · retained</p>
           <strong id="completed-jobs">—</strong>
           <small id="outcome-detail">No outcomes yet</small>
         </article>
@@ -108,6 +108,7 @@
         <p id="last-updated" class="last-updated">Waiting for first update</p>
       </div>
 
+      <p>All active jobs and 20 recent finished jobs. The server retains up to 100 finished jobs.</p>
       <div id="jobs-list" class="jobs-list" aria-live="polite" aria-busy="true"></div>
       <div id="empty-state" class="empty-state" hidden>
         <span aria-hidden="true">◎</span>
