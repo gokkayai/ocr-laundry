@@ -96,7 +96,7 @@ a {
   height: 42px;
   place-items: center;
   border: 2px solid var(--ink);
-  border-radius: 50%;
+  border-radius: 7px;
   background: var(--yellow);
 }
 
