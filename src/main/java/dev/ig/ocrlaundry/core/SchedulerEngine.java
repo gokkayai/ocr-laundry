@@ -40,6 +40,7 @@ public final class SchedulerEngine implements AutoCloseable {
     private long nextSubmittedSequence;
     private int runningCount;
     private boolean acceptingSubmissions = true;
+    private boolean dispatchStarted;
     private boolean shutdownRequested;
 
     public SchedulerEngine(DocumentCatalog documentCatalog, OcrRunner ocrRunner) {
@@ -83,6 +84,17 @@ public final class SchedulerEngine implements AutoCloseable {
             int pendingCapacity,
             int workerCount,
             Clock clock) {
+        this(documentCatalog, ocrRunner, policy, pendingCapacity, workerCount, clock, true);
+    }
+
+    private SchedulerEngine(
+            DocumentCatalog documentCatalog,
+            OcrRunner ocrRunner,
+            SchedulingPolicy policy,
+            int pendingCapacity,
+            int workerCount,
+            Clock clock,
+            boolean dispatchStarted) {
         this.documentCatalog = Objects.requireNonNull(documentCatalog, "documentCatalog");
         this.ocrRunner = Objects.requireNonNull(ocrRunner, "ocrRunner");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -94,6 +106,7 @@ public final class SchedulerEngine implements AutoCloseable {
             throw new IllegalArgumentException("workerCount must be positive");
         }
         this.pendingCapacity = pendingCapacity;
+        this.dispatchStarted = dispatchStarted;
         pendingJobs = new PriorityQueue<>(QueueOrdering.forPolicy(schedulingPolicy));
         workers = new ArrayList<>(workerCount);
         for (int workerNumber = 1; workerNumber <= workerCount; workerNumber++) {
@@ -102,6 +115,31 @@ public final class SchedulerEngine implements AutoCloseable {
                     "ocr-laundry-worker-" + workerNumber);
             workers.add(worker);
             worker.start();
+        }
+    }
+
+    public static SchedulerEngine paused(
+            DocumentCatalog documentCatalog,
+            OcrRunner ocrRunner,
+            SchedulingPolicy policy,
+            int workerCount) {
+        return new SchedulerEngine(
+                documentCatalog,
+                ocrRunner,
+                policy,
+                DEFAULT_PENDING_CAPACITY,
+                workerCount,
+                Clock.systemUTC(),
+                false);
+    }
+
+    public void start() {
+        synchronized (stateLock) {
+            if (shutdownRequested) {
+                throw new IllegalStateException("Scheduler is shutting down");
+            }
+            dispatchStarted = true;
+            stateLock.notifyAll();
         }
     }
 
@@ -219,6 +257,7 @@ public final class SchedulerEngine implements AutoCloseable {
     public void close() {
         synchronized (stateLock) {
             acceptingSubmissions = false;
+            dispatchStarted = true;
             shutdownRequested = true;
             stateLock.notifyAll();
         }
@@ -241,7 +280,7 @@ public final class SchedulerEngine implements AutoCloseable {
             JobRecord job;
             CancellationToken cancellationToken;
             synchronized (stateLock) {
-                while (pendingJobs.isEmpty() && !shutdownRequested) {
+                while ((!dispatchStarted || pendingJobs.isEmpty()) && !shutdownRequested) {
                     try {
                         stateLock.wait();
                     } catch (InterruptedException exception) {

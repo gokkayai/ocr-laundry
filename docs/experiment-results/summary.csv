@@ -1,0 +1,5 @@
+policy,workers,successful_jobs,failed_jobs,mean_completion_ms,median_completion_ms,p95_completion_ms,max_queue_wait_ms,small_mean_ms,medium_mean_ms,long_mean_ms,documents_per_minute,pages_per_minute,total_wall_ms
+FIFO,1,9,0,7290.612,7060.160,10208.385,9100.542,8799.359,7666.768,5405.711,20.436,47.684,26423.913
+ESTIMATED_SJF,1,9,0,4247.728,3434.432,8509.619,3440.428,1166.715,3416.676,8159.794,22.059,51.471,24479.780
+FIFO,2,9,0,3710.796,3663.497,5147.903,2684.157,3728.573,2505.024,4898.791,36.741,85.730,14697.318
+ESTIMATED_SJF,2,9,0,3264.942,2442.477,6157.100,1329.074,1247.869,2558.996,5987.960,30.059,70.138,17964.557

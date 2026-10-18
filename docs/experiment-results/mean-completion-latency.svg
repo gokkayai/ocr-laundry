@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="430" viewBox="0 0 760 430">
+  <rect width="100%" height="100%" fill="white"/>
+  <text x="380" y="30" text-anchor="middle" font-family="sans-serif" font-size="20">Mean completion latency</text>
+  <line x1="70" y1="350" x2="725" y2="350" stroke="#333"/>
+  <rect x="100" y="90" width="95" height="260" fill="#5b8ff9"/>
+  <text x="147" y="82" text-anchor="middle" font-family="sans-serif" font-size="13">7290.612 ms</text>
+  <text x="147" y="375" text-anchor="middle" font-family="sans-serif" font-size="12">FIFO, 1 worker</text>
+  <rect x="260" y="199" width="95" height="151" fill="#61dDAa"/>
+  <text x="307" y="191" text-anchor="middle" font-family="sans-serif" font-size="13">4247.728 ms</text>
+  <text x="307" y="375" text-anchor="middle" font-family="sans-serif" font-size="12">estimated SJF, 1 worker</text>
+  <rect x="420" y="218" width="95" height="132" fill="#5b8ff9"/>
+  <text x="467" y="210" text-anchor="middle" font-family="sans-serif" font-size="13">3710.796 ms</text>
+  <text x="467" y="375" text-anchor="middle" font-family="sans-serif" font-size="12">FIFO, 2 workers</text>
+  <rect x="580" y="234" width="95" height="116" fill="#61dDAa"/>
+  <text x="627" y="226" text-anchor="middle" font-family="sans-serif" font-size="13">3264.942 ms</text>
+  <text x="627" y="375" text-anchor="middle" font-family="sans-serif" font-size="12">estimated SJF, 2 workers</text>
+  <text x="20" y="220" transform="rotate(-90 20 220)" text-anchor="middle" font-family="sans-serif" font-size="13">milliseconds</text>
+</svg>

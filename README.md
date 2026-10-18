@@ -15,7 +15,16 @@ Build and run the application from the command line:
 java -jar target/ocr-laundry.jar
 ```
 
-The application prints `ocr-laundry starting` and exits.
+The application prints its available commands. To regenerate the fixed benchmark PDFs and run
+the FIFO/estimated-SJF experiment:
+
+```shell
+java -jar target/ocr-laundry.jar generate-samples samples
+java -jar target/ocr-laundry.jar experiment samples docs/experiment-results 3
+```
+
+See [`docs/experiments.md`](docs/experiments.md) for the method, measured results, plot,
+limitations, and environment details.
 
 ## OCR requirements
 

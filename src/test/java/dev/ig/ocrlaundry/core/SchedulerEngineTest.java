@@ -284,6 +284,37 @@ class SchedulerEngineTest {
     }
 
     @Test
+    void pausedSchedulerHoldsACompleteBacklogUntilStarted() throws Exception {
+        DocumentCatalog catalog = createCatalog(3);
+        List<String> executions = new CopyOnWriteArrayList<>();
+        OcrRunner runner = (path, cancellationToken) -> {
+            executions.add(path.getFileName().toString());
+            return OcrResult.success(1, "text", Duration.ZERO);
+        };
+        SchedulerEngine engine = SchedulerEngine.paused(
+                catalog,
+                runner,
+                SchedulingPolicy.FIFO,
+                2);
+
+        try {
+            engine.submit(new JobSpec("document-0", 0));
+            engine.submit(new JobSpec("document-1", 0));
+            engine.submit(new JobSpec("document-2", 0));
+
+            assertEquals(3, engine.pendingCount());
+            assertEquals(0, engine.runningCount());
+            assertTrue(executions.isEmpty());
+
+            engine.start();
+            assertTrue(engine.awaitIdle(Duration.ofSeconds(5)));
+            assertEquals(3, executions.size());
+        } finally {
+            engine.close();
+        }
+    }
+
+    @Test
     void fifoAndEstimatedSjfOrderTheSameBacklogDifferently() throws Exception {
         Map<String, Integer> pageCounts = new LinkedHashMap<>();
         pageCounts.put("blocker", 2);
