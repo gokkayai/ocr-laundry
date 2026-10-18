@@ -21,7 +21,8 @@ java -jar target/ocr-laundry.jar serve 8080 samples fifo 2
 ```
 
 Use `sjf` instead of `fifo` to run the estimated shortest-job-first policy. The server binds to
-`127.0.0.1`; press Ctrl+C to stop it cleanly.
+`127.0.0.1` by default; set `OCR_LAUNDRY_HOST` only when another interface is required, as in the
+Docker image. Press Ctrl+C to stop it cleanly.
 
 Open `http://127.0.0.1:8080` in a browser for the live dashboard, or continue with the commands
 below to use the API directly.

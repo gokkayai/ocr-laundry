@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+.vscode
+node_modules
+playwright-report
+target
+test-results
+*.log
+hs_err_pid*
+replay_pid*

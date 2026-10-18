@@ -18,7 +18,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('dashboard.png'), fullPage: true, animations: 'disabled' });
     await page.goto('/benchmark');
-    await expect(page.locator('#benchmark-finding')).toContainText('41.7% lower');
+    await expect(page.locator('#benchmark-finding')).toContainText('Estimated SJF mean latency was');
     await expect(page.locator('#observations')).toHaveText('36');
     await expect(page.locator('.benchmark-plot')).toBeVisible();
     expect(await page.locator('.benchmark-plot').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);

@@ -13,6 +13,8 @@ import dev.ig.ocrlaundry.ocr.TesseractOcrRunner;
 
 public final class ServerLauncher {
     private static final int DEFAULT_PORT = 8080;
+    private static final String DEFAULT_HOST = "127.0.0.1";
+    private static final String HOST_ENVIRONMENT_VARIABLE = "OCR_LAUNDRY_HOST";
 
     private ServerLauncher() {
     }
@@ -26,6 +28,7 @@ public final class ServerLauncher {
         int workers = args.length >= 4
                 ? positiveInteger(args[3], "workers")
                 : SchedulerEngine.DEFAULT_WORKER_COUNT;
+        String host = host(System.getenv(HOST_ENVIRONMENT_VARIABLE));
 
         DocumentCatalog catalog = new DocumentCatalog(
                 SampleDocuments.paths(sampleDirectory),
@@ -38,7 +41,7 @@ public final class ServerLauncher {
         OcrLaundryServer server;
         try {
             server = new OcrLaundryServer(
-                    new InetSocketAddress("127.0.0.1", port),
+                    new InetSocketAddress(host, port),
                     catalog,
                     scheduler,
                     TesseractHealthCheck::isAvailable);
@@ -49,10 +52,22 @@ public final class ServerLauncher {
         Runtime.getRuntime().addShutdownHook(new Thread(server::close, "ocr-laundry-shutdown"));
         server.start();
         System.out.printf(
-                "ocr-laundry listening on http://127.0.0.1:%d (%s, %d workers)%n",
+                "ocr-laundry listening on http://%s:%d (%s, %d workers)%n",
+                host,
                 server.port(),
                 policy,
                 workers);
+    }
+
+    private static String host(String configuredHost) {
+        if (configuredHost == null) {
+            return DEFAULT_HOST;
+        }
+        String host = configuredHost.trim();
+        if (host.isEmpty()) {
+            throw new IllegalArgumentException(HOST_ENVIRONMENT_VARIABLE + " must not be blank");
+        }
+        return host;
     }
 
     private static int port(String value) {

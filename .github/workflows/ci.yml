@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Tesseract
+        run: sudo apt-get update && sudo apt-get install --yes tesseract-ocr tesseract-ocr-eng
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Compile and test
+        run: ./mvnw --batch-mode clean verify
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install browser test dependencies
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Test dashboard in a real browser
+        env:
+          PLAYWRIGHT_USE_BUNDLED: '1'
+        run: npm run test:browser
+
+  container-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and test the resource-limited container
+        run: ./scripts/docker-smoke-test.sh ocr-laundry:ci
