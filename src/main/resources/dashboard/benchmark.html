@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ocr-laundry benchmark results</title>
   <link rel="stylesheet" href="/app.css">
+  <script src="/benchmark.js" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -15,22 +16,21 @@
   <main>
     <section class="intro">
       <div><p class="eyebrow">Measured, not simulated</p><h1>Scheduling<br><em>results.</em></h1></div>
-      <p class="intro-copy">Three image-only PDFs, three interleaved repetitions, and identical
-        full-backlog arrivals for FIFO and estimated shortest-job-first.</p>
+      <p class="intro-copy">Recorded OCR experiments comparing FIFO and estimated shortest-job-first.
+        Headline results are calculated from the packaged summary data.</p>
     </section>
     <section class="workspace">
       <div class="section-heading"><div><p class="section-number">Finding</p><h2>Mean completion latency</h2></div>
-        <p>Estimated SJF reduced the measured mean by 41.7% with one worker and 12.0% with two.
-          All 36 jobs completed successfully.</p></div>
+        <p id="benchmark-finding" role="status">Loading benchmark results…</p></div>
       <img class="benchmark-plot" src="/benchmark/plot.svg" alt="Bar chart of mean completion latency by policy and worker count">
     </section>
     <section class="metrics-section">
       <div class="section-heading compact"><div><p class="section-number">Evidence</p><h2>Download the data</h2></div></div>
       <div class="metric-grid">
-        <article class="metric-card"><p>Raw observations</p><strong>36</strong><a href="/benchmark/raw.csv">Download raw.csv</a></article>
-        <article class="metric-card"><p>Conditions</p><strong>4</strong><a href="/benchmark/summary.csv">Download summary.csv</a></article>
-        <article class="metric-card"><p>Failures</p><strong>0</strong><small>Across all measured runs</small></article>
-        <article class="metric-card accent"><p>Primary result</p><strong>41.7%</strong><small>Lower mean, SJF · 1 worker</small></article>
+        <article class="metric-card"><p>Raw observations</p><strong id="observations">—</strong><a href="/benchmark/raw.csv">Download raw.csv</a></article>
+        <article class="metric-card"><p>Conditions</p><strong id="conditions">—</strong><a href="/benchmark/summary.csv">Download summary.csv</a></article>
+        <article class="metric-card"><p>Failures</p><strong id="failures">—</strong><small>Across all measured runs</small></article>
+        <article class="metric-card"><p>Interpretation</p><small>Small synthetic corpus; latency improvements do not imply throughput improvements. Compare equal outcomes.</small></article>
       </div>
     </section>
   </main>

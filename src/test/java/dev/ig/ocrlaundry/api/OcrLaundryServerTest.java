@@ -116,7 +116,7 @@ class OcrLaundryServerTest {
             assertTrue(!script.body().contains("innerHTML"));
             assertTrue(!script.body().contains("setInterval"));
             assertEquals(200, benchmark.statusCode());
-            assertTrue(benchmark.body().contains("41.7%"));
+            assertTrue(benchmark.body().contains("benchmark.js"));
             assertEquals(200, summary.statusCode());
             assertTrue(summary.body().startsWith("policy,workers"));
         }

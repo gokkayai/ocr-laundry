@@ -10,6 +10,7 @@ final class DashboardAssets {
             "/", new Asset("dashboard/index.html", "text/html; charset=utf-8"),
             "/app.css", new Asset("dashboard/app.css", "text/css; charset=utf-8"),
             "/app.js", new Asset("dashboard/app.js", "text/javascript; charset=utf-8"),
+            "/benchmark.js", new Asset("dashboard/benchmark.js", "text/javascript; charset=utf-8"),
             "/benchmark", new Asset("dashboard/benchmark.html", "text/html; charset=utf-8"),
             "/benchmark/plot.svg", new Asset(
                     "published-docs/mean-completion-latency.svg",

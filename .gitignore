@@ -3,6 +3,9 @@
 
 # Maven build output
 target/
+node_modules/
+test-results/
+playwright-report/
 
 # Log file
 *.log

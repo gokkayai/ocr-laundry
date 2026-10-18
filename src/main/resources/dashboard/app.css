@@ -48,11 +48,11 @@ a {
   padding: 0.75rem 1rem;
   color: white;
   background: var(--ink);
-  transform: translateY(-150%);
+  clip-path: inset(100%);
 }
 
 .skip-link:focus {
-  transform: translateY(0);
+  clip-path: none;
 }
 
 .site-header {
