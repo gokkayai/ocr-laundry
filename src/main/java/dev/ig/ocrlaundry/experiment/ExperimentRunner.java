@@ -17,6 +17,7 @@ import java.util.Random;
 import dev.ig.ocrlaundry.core.SchedulerEngine;
 import dev.ig.ocrlaundry.docs.DocumentCatalog;
 import dev.ig.ocrlaundry.docs.PdfInspector;
+import dev.ig.ocrlaundry.docs.SampleDocuments;
 import dev.ig.ocrlaundry.model.JobSnapshot;
 import dev.ig.ocrlaundry.model.JobSpec;
 import dev.ig.ocrlaundry.model.JobStatus;
@@ -41,7 +42,7 @@ public final class ExperimentRunner {
                 ? positiveInteger(args[2], "repetitions")
                 : DEFAULT_REPETITIONS;
 
-        Map<String, Path> samples = samplePaths(sampleDirectory);
+        Map<String, Path> samples = SampleDocuments.paths(sampleDirectory);
         DocumentCatalog catalog = new DocumentCatalog(samples, new PdfInspector());
         List<Measurement> measurements = runAll(catalog, repetitions);
         List<Summary> summaries = summarize(measurements);
@@ -301,14 +302,6 @@ public final class ExperimentRunner {
                     summary.p95CompletionMillis(),
                     summary.documentsPerMinute());
         }
-    }
-
-    private static Map<String, Path> samplePaths(Path directory) {
-        Map<String, Path> paths = new LinkedHashMap<>();
-        paths.put("long", directory.resolve("scanned-long.pdf"));
-        paths.put("medium", directory.resolve("scanned-medium.pdf"));
-        paths.put("small", directory.resolve("scanned-small.pdf"));
-        return paths;
     }
 
     private static int positiveInteger(String value, String name) {
