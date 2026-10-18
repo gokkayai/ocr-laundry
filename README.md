@@ -16,3 +16,22 @@ java -jar target/ocr-laundry.jar
 ```
 
 The application prints `ocr-laundry starting` and exits.
+
+## OCR requirements
+
+Install Tesseract with the English language data. Verify the installation with:
+
+```shell
+sudo dnf install tesseract tesseract-langpack-eng
+tesseract --version
+tesseract --list-langs
+```
+
+To check Tesseract manually on an image, run:
+
+```shell
+tesseract input.png stdout -l eng
+```
+
+The OCR runner renders scanned PDF pages at 200 DPI and processes them in page
+order. The default limit is 25 MB, 100 pages, and two minutes per document.
