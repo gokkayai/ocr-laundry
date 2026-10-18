@@ -3,6 +3,7 @@ package dev.ig.ocrlaundry.core;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,12 +17,14 @@ import dev.ig.ocrlaundry.model.DocumentInfo;
 import dev.ig.ocrlaundry.model.JobRecord;
 import dev.ig.ocrlaundry.model.JobSnapshot;
 import dev.ig.ocrlaundry.model.JobSpec;
+import dev.ig.ocrlaundry.model.JobStatus;
 import dev.ig.ocrlaundry.model.SchedulingPolicy;
 import dev.ig.ocrlaundry.ocr.OcrResult;
 import dev.ig.ocrlaundry.ocr.OcrRunner;
 
 public final class SchedulerEngine implements AutoCloseable {
     public static final int DEFAULT_PENDING_CAPACITY = 20;
+    public static final int DEFAULT_WORKER_COUNT = 2;
 
     private final Object stateLock = new Object();
     private final DocumentCatalog documentCatalog;
@@ -30,7 +33,8 @@ public final class SchedulerEngine implements AutoCloseable {
     private final int pendingCapacity;
     private final PriorityQueue<JobRecord> pendingJobs;
     private final Map<UUID, JobRecord> jobs = new LinkedHashMap<>();
-    private final Thread worker;
+    private final Map<UUID, CancellationToken> runningTokens = new HashMap<>();
+    private final List<Thread> workers;
 
     private long nextSubmittedSequence;
     private int runningCount;
@@ -43,6 +47,17 @@ public final class SchedulerEngine implements AutoCloseable {
                 ocrRunner,
                 SchedulingPolicy.FIFO,
                 DEFAULT_PENDING_CAPACITY,
+                DEFAULT_WORKER_COUNT,
+                Clock.systemUTC());
+    }
+
+    public SchedulerEngine(DocumentCatalog documentCatalog, OcrRunner ocrRunner, int workerCount) {
+        this(
+                documentCatalog,
+                ocrRunner,
+                SchedulingPolicy.FIFO,
+                DEFAULT_PENDING_CAPACITY,
+                workerCount,
                 Clock.systemUTC());
     }
 
@@ -51,6 +66,7 @@ public final class SchedulerEngine implements AutoCloseable {
             OcrRunner ocrRunner,
             SchedulingPolicy policy,
             int pendingCapacity,
+            int workerCount,
             Clock clock) {
         this.documentCatalog = Objects.requireNonNull(documentCatalog, "documentCatalog");
         this.ocrRunner = Objects.requireNonNull(ocrRunner, "ocrRunner");
@@ -58,10 +74,19 @@ public final class SchedulerEngine implements AutoCloseable {
         if (pendingCapacity <= 0) {
             throw new IllegalArgumentException("pendingCapacity must be positive");
         }
+        if (workerCount <= 0) {
+            throw new IllegalArgumentException("workerCount must be positive");
+        }
         this.pendingCapacity = pendingCapacity;
         pendingJobs = new PriorityQueue<>(QueueOrdering.forPolicy(policy));
-        worker = new Thread(this::workerLoop, "ocr-laundry-worker");
-        worker.start();
+        workers = new ArrayList<>(workerCount);
+        for (int workerNumber = 1; workerNumber <= workerCount; workerNumber++) {
+            Thread worker = new Thread(
+                    this::workerLoop,
+                    "ocr-laundry-worker-" + workerNumber);
+            workers.add(worker);
+            worker.start();
+        }
     }
 
     public JobSnapshot submit(JobSpec spec) {
@@ -108,6 +133,30 @@ public final class SchedulerEngine implements AutoCloseable {
         }
     }
 
+    public boolean cancel(UUID jobId) {
+        Objects.requireNonNull(jobId, "jobId");
+
+        synchronized (stateLock) {
+            JobRecord job = jobs.get(jobId);
+            if (job == null) {
+                return false;
+            }
+
+            if (job.status() == JobStatus.QUEUED) {
+                pendingJobs.remove(job);
+                job.markCancelled(clock.instant());
+                stateLock.notifyAll();
+                return true;
+            }
+
+            if (job.status() != JobStatus.RUNNING) {
+                return false;
+            }
+            runningTokens.get(jobId).cancel();
+            return true;
+        }
+    }
+
     public int pendingCount() {
         synchronized (stateLock) {
             return pendingJobs.size();
@@ -118,6 +167,10 @@ public final class SchedulerEngine implements AutoCloseable {
         synchronized (stateLock) {
             return runningCount;
         }
+    }
+
+    public int workerCount() {
+        return workers.size();
     }
 
     public boolean awaitIdle(Duration timeout) throws InterruptedException {
@@ -150,20 +203,23 @@ public final class SchedulerEngine implements AutoCloseable {
             stateLock.notifyAll();
         }
 
-        if (Thread.currentThread() == worker) {
-            return;
-        }
-
-        try {
-            worker.join();
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
+        for (Thread worker : workers) {
+            if (Thread.currentThread() == worker) {
+                continue;
+            }
+            try {
+                worker.join();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 
     private void workerLoop() {
         while (true) {
             JobRecord job;
+            CancellationToken cancellationToken;
             synchronized (stateLock) {
                 while (pendingJobs.isEmpty() && !shutdownRequested) {
                     try {
@@ -180,19 +236,21 @@ public final class SchedulerEngine implements AutoCloseable {
 
                 job = pendingJobs.remove();
                 job.markRunning(clock.instant());
+                cancellationToken = new CancellationToken();
+                runningTokens.put(job.id(), cancellationToken);
                 runningCount++;
                 stateLock.notifyAll();
             }
 
-            runJob(job);
+            runJob(job, cancellationToken);
         }
     }
 
-    private void runJob(JobRecord job) {
+    private void runJob(JobRecord job, CancellationToken cancellationToken) {
         OcrResult result = null;
         String unexpectedError = null;
         try {
-            result = ocrRunner.run(job.document().path());
+            result = ocrRunner.run(job.document().path(), cancellationToken);
             if (result == null) {
                 unexpectedError = "OCR runner returned no result";
             }
@@ -201,11 +259,14 @@ public final class SchedulerEngine implements AutoCloseable {
         }
 
         synchronized (stateLock) {
-            if (unexpectedError == null) {
+            if (cancellationToken.isCancellationRequested()) {
+                job.markCancelled(clock.instant());
+            } else if (unexpectedError == null) {
                 job.markFinished(result, clock.instant());
             } else {
                 job.markFailed(unexpectedError, clock.instant());
             }
+            runningTokens.remove(job.id());
             runningCount--;
             stateLock.notifyAll();
         }

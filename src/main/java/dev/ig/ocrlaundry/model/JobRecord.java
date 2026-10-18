@@ -49,6 +49,10 @@ public final class JobRecord {
         return document;
     }
 
+    public JobStatus status() {
+        return status;
+    }
+
     public void markRunning(Instant time) {
         requireStatus(JobStatus.QUEUED);
         startedAt = notBefore(time, submittedAt);
@@ -69,6 +73,15 @@ public final class JobRecord {
         finishedAt = notBefore(time, startedAt);
         errorMessage = Objects.requireNonNull(message, "message");
         status = JobStatus.FAILED;
+    }
+
+    public void markCancelled(Instant time) {
+        if (status != JobStatus.QUEUED && status != JobStatus.RUNNING) {
+            throw new IllegalStateException("Cannot cancel job from " + status);
+        }
+        Instant lowerBound = startedAt == null ? submittedAt : startedAt;
+        finishedAt = notBefore(time, lowerBound);
+        status = JobStatus.CANCELLED;
     }
 
     public JobSnapshot snapshot() {

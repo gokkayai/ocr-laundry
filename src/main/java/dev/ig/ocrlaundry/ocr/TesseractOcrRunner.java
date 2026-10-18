@@ -16,11 +16,13 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 
+import dev.ig.ocrlaundry.core.CancellationToken;
 import dev.ig.ocrlaundry.docs.PdfInspector;
 
 public final class TesseractOcrRunner implements OcrRunner {
     public static final int DEFAULT_DPI = 200;
     public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(2);
+    private static final long CANCELLATION_POLL_MILLIS = 100;
 
     private final PdfInspector pdfInspector;
     private final String executable;
@@ -54,15 +56,22 @@ public final class TesseractOcrRunner implements OcrRunner {
         this.tempRoot = tempRoot;
     }
 
-    @Override
     public OcrResult run(Path pdfPath) {
+        return run(pdfPath, new CancellationToken());
+    }
+
+    @Override
+    public OcrResult run(Path pdfPath, CancellationToken cancellationToken) {
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
         long startedAt = System.nanoTime();
         long deadline = startedAt + timeout.toNanos();
         int pageCount = 0;
         Path tempDirectory = null;
 
         try {
+            ensureCanContinue(deadline, cancellationToken);
             pageCount = pdfInspector.pageCount(pdfPath);
+            ensureCanContinue(deadline, cancellationToken);
             tempDirectory = createTempDirectory();
             StringBuilder text = new StringBuilder();
 
@@ -70,13 +79,15 @@ public final class TesseractOcrRunner implements OcrRunner {
                 PDFRenderer renderer = new PDFRenderer(document);
 
                 for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-                    ensureTimeRemaining(deadline);
+                    ensureCanContinue(deadline, cancellationToken);
                     Path imagePath = tempDirectory.resolve("page-" + pageIndex + ".png");
                     Path textPath = tempDirectory.resolve("page-" + pageIndex + ".txt");
                     Path errorPath = tempDirectory.resolve("page-" + pageIndex + ".err");
 
                     renderPage(renderer, pageIndex, imagePath);
-                    runTesseract(imagePath, textPath, errorPath, deadline);
+                    ensureCanContinue(deadline, cancellationToken);
+                    runTesseract(imagePath, textPath, errorPath, deadline, cancellationToken);
+                    ensureCanContinue(deadline, cancellationToken);
 
                     if (!text.isEmpty()) {
                         text.append(System.lineSeparator());
@@ -112,7 +123,12 @@ public final class TesseractOcrRunner implements OcrRunner {
         }
     }
 
-    private void runTesseract(Path imagePath, Path textPath, Path errorPath, long deadline)
+    private void runTesseract(
+            Path imagePath,
+            Path textPath,
+            Path errorPath,
+            long deadline,
+            CancellationToken cancellationToken)
             throws IOException, InterruptedException {
         Process process = new ProcessBuilder(
                 executable,
@@ -125,10 +141,25 @@ public final class TesseractOcrRunner implements OcrRunner {
                 .start();
 
         try {
-            long remainingNanos = deadline - System.nanoTime();
-            if (remainingNanos <= 0 || !process.waitFor(remainingNanos, TimeUnit.NANOSECONDS)) {
+            while (process.isAlive()) {
+                if (cancellationToken.isCancellationRequested()) {
+                    stopProcess(process);
+                    throw new IOException("OCR was cancelled");
+                }
+
+                long remainingNanos = deadline - System.nanoTime();
+                if (remainingNanos <= 0) {
+                    stopProcess(process);
+                    throw new IOException("OCR timed out after " + timeout);
+                }
+
+                long pollNanos = TimeUnit.MILLISECONDS.toNanos(CANCELLATION_POLL_MILLIS);
+                process.waitFor(Math.min(remainingNanos, pollNanos), TimeUnit.NANOSECONDS);
+            }
+
+            if (cancellationToken.isCancellationRequested()) {
                 stopProcess(process);
-                throw new IOException("OCR timed out after " + timeout);
+                throw new IOException("OCR was cancelled");
             }
         } catch (InterruptedException exception) {
             process.destroyForcibly();
@@ -144,13 +175,22 @@ public final class TesseractOcrRunner implements OcrRunner {
 
     private static void stopProcess(Process process) throws InterruptedException {
         process.destroy();
-        if (!process.waitFor(500, TimeUnit.MILLISECONDS)) {
+        try {
+            if (!process.waitFor(500, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly();
+                process.waitFor();
+            }
+        } catch (InterruptedException exception) {
             process.destroyForcibly();
-            process.waitFor();
+            throw exception;
         }
     }
 
-    private static void ensureTimeRemaining(long deadline) throws IOException {
+    private static void ensureCanContinue(long deadline, CancellationToken cancellationToken)
+            throws IOException {
+        if (cancellationToken.isCancellationRequested()) {
+            throw new IOException("OCR was cancelled");
+        }
         if (System.nanoTime() >= deadline) {
             throw new IOException("OCR timed out while rendering PDF pages");
         }
